@@ -1,6 +1,7 @@
 library(readxl)
 library(tidyverse)
 library(zoo)
+library(mFilter)
 
 df1 <- read_excel("data/grid1_cjcnsm3z.xlsx", skip = 1)
 df2 <- read_excel("data/grid1_upkoqq33.xlsx")
@@ -73,23 +74,57 @@ df <- df %>%
   select(-c(trade_balance_usd_b, total_trade, exports_b, imports_b)) %>% 
   left_join(df_tri, by = c("year", "quarter")) %>% 
   left_join(rate, by = c("year", "quarter")) %>% 
-  mutate(bp1 = exports_b - imports_b) %>% 
-  select(year, quarter, delta_m2, growth_target, delta_v, delta_gdp, unemployment_rate,
-         unemployment_target, inflation_rate = cpi_yoy, inflation_target, bp1, bp2 = trade_balance_usd_b,
-         interest_rate = rate, wage = minimum_wage_beijing, real_exchange_rate,
-         commoditie_index = commodities_price_yoy) %>% 
+  mutate(bp1 = exports_b - imports_b,
+         gdp_natural = hpfilter(gdp_constant_price, freq = 1600)$trend,
+         gdp_cycle = hpfilter(gdp_constant_price, freq = 1600)$cycle) %>% 
+  select(year, quarter, delta_m2, growth_target, delta_v, delta_gdp, gdp_natural, gdp_cycle, 
+         unemployment_rate, unemployment_target, inflation_rate = cpi_yoy, inflation_target, 
+         bp1, bp2 = trade_balance_usd_b, interest_rate = rate, wage = minimum_wage_beijing, 
+         real_exchange_rate, commoditie_index = commodities_price_yoy, gdp_constant_price) %>% 
   filter(!is.na(delta_v)) %>% 
-  mutate(covid = ifelse(is.na(growth_target), 1, 0))
-
-#############################################################################
-#                                                                           #
-#         TEM QUE PEGAR O GDP E DESCOBRIR SE É MENSAL OU TRIMESTRAL         #
-#                                                                           #
-#############################################################################
+  mutate(covid = ifelse(is.na(growth_target), 1, 0)) %>% 
+  arrange(year, quarter)
 
 ##### Estimation #####
 
+fit_y <- df %>% 
+  mutate(rate = lag(interest_rate)) %>% 
+  filter(!is.na(rate)) %>% 
+  lm(log(gdp_constant_price) ~ rate + year + quarter, data = .)
+summary(fit_y)
 
+fit_u <- df %>% 
+  mutate(cycle = lag(gdp_cycle),
+         wage = lag(wage)) %>% 
+  filter(!is.na(cycle), !is.na(wage)) %>% 
+  lm(unemployment_rate ~ cycle + log(wage), data = .)
+summary(fit_u)
+
+fit_pi <- df %>% 
+  mutate(cycle = lag(gdp_cycle),
+         rate = lag(interest_rate)) %>% 
+  filter(!is.na(cycle), !is.na(rate)) %>% 
+  lm(inflation_rate ~ cycle + rate, data = .)
+summary(fit_pi)
+
+fit_bp <- df %>% 
+  mutate(commodity = lag(commoditie_index)) %>% 
+  filter(!is.na(commodity)) %>% 
+  lm(bp1 ~ real_exchange_rate + commodity, data = .)
+summary(fit_bp)
+
+df %>% 
+  slice(-1) %>% 
+  mutate(growth_target = ifelse(is.na(growth_target), 0, growth_target),
+         growth_deviation = fit_y$fitted.values - growth_target,
+         unemployment_deviation = fit_u$fitted.values - unemployment_target,
+         inflation_deviation = fit_pi$fitted.values - inflation_target,
+         bp_deviation = fit_bp$fitted.values - 0,
+         assimetria_gdp = ifelse(growth_deviation < 0, 1, 0)) %>% 
+  lm(delta_m2 ~ growth_target + delta_m2 + inflation_deviation + 
+       covid * (growth_deviation + unemployment_deviation + bp_deviation), 
+     data = .) %>% 
+  summary()
 
 
 
