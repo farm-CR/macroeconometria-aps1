@@ -2,6 +2,8 @@ library(readxl)
 library(tidyverse)
 library(zoo)
 library(mFilter)
+library(lubridate)
+library(clock)
 
 df1 <- read_excel("data/grid1_cjcnsm3z.xlsx", skip = 1)
 df2 <- read_excel("data/grid1_upkoqq33.xlsx")
@@ -126,5 +128,45 @@ df %>%
      data = .) %>% 
   summary()
 
+# PLOTS ----
+
+df %>% 
+  mutate(date = date_build(year, quarter * 3)) %>% 
+  select(date, "Taxa de Desemprego" = unemployment_rate, "Meta de Desemprego" = unemployment_target) %>% 
+  pivot_longer(cols = 2:3,
+               names_to = "Variável",
+               values_to = "valor") %>% 
+  ggplot(aes(x = date, y = valor, color = Variável)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+
+ggsave("plots/desemprego.png", height = 4, width = 7, dpi = 600)
+
+df %>% 
+  mutate(date = date_build(year, quarter * 3)) %>% 
+  select(date, "Taxa de Inflação" = inflation_rate, "Meta de Inflação" = inflation_target) %>% 
+  pivot_longer(cols = 2:3,
+               names_to = "Variável",
+               values_to = "valor") %>% 
+  ggplot(aes(x = date, y = valor, color = Variável)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+
+ggsave("plots/inflacao.png", height = 4, width = 7, dpi = 600)
+
+df %>% 
+  mutate(date = date_build(year, quarter * 3)) %>% 
+  select(date, "Meta Crescimento PIB" = growth_target, "Crescimento PIB" = delta_gdp) %>% 
+  pivot_longer(cols = 2:3,
+               names_to = "Variável",
+               values_to = "valor") %>% 
+  ggplot(aes(x = date, y = valor, color = Variável)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+  
+ggsave("plots/pib.png", height = 4, width = 7, dpi = 600)
 
 
