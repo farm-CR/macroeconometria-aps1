@@ -157,14 +157,22 @@ df %>%
 ggsave("plots/inflacao.png", height = 4, width = 7, dpi = 600)
 
 df %>% 
-  mutate(date = date_build(year, quarter * 3)) %>% 
-  select(date, "Meta Crescimento PIB" = growth_target, "Crescimento PIB" = delta_gdp) %>% 
+  mutate(delta_gdp = (delta_gdp / 100) + 1,
+         growth_target = (growth_target / 100) + 1) %>% 
+  group_by(year) %>% 
+  summarize(delta_gdp = prod(delta_gdp),
+            growth_target = prod(growth_target)) %>% 
+  mutate(delta_gdp = delta_gdp - 1,
+         growth_target = growth_target - 1) %>% 
+  select(year, "Meta Crescimento PIB" = growth_target, "Crescimento PIB" = delta_gdp) %>% 
+  filter(year > 2014, year < 2023) %>% 
   pivot_longer(cols = 2:3,
                names_to = "Variável",
                values_to = "valor") %>% 
-  ggplot(aes(x = date, y = valor, color = Variável)) +
+  ggplot(aes(x = year, y = valor, color = Variável)) +
   geom_line() +
   geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
   scale_y_continuous(labels = scales::percent_format(scale = 1))
   
 ggsave("plots/pib.png", height = 4, width = 7, dpi = 600)
